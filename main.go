@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"net"
-	"os"
 	"strings"
 
 	"github.com/google/gopacket"
@@ -17,6 +17,7 @@ var (
 )
 
 func main() {
+	log.SetFlags(0)
 	flag.Parse()
 
 	var iface *net.Interface
@@ -24,21 +25,18 @@ func main() {
 	if fInterface != nil && *fInterface != "" {
 		i, err := net.InterfaceByName(*fInterface)
 		if err != nil {
-			fmt.Printf("Cannot get interface %q: %s\n", *fInterface, err)
-			os.Exit(1)
+			log.Fatalf("Cannot get interface %q: %s", *fInterface, err)
 		}
 
 		if err := checkInterface(i); err != nil {
-			fmt.Printf("Cannot use interface %q: %s\n", *fInterface, err)
-			os.Exit(1)
+			log.Fatalf("Cannot use interface %q: %s", *fInterface, err)
 		}
 
 		iface = i
 	} else {
 		ifs, err := net.Interfaces()
 		if err != nil {
-			fmt.Printf("Cannot list interfaces: %s\n", err)
-			os.Exit(1)
+			log.Fatalf("Cannot list interfaces: %s", err)
 		}
 
 		for _, i := range ifs {
@@ -51,20 +49,17 @@ func main() {
 		}
 
 		if iface == nil {
-			fmt.Printf("Cannot find suitable interface\n", err)
-			os.Exit(1)
+			log.Fatal("Cannot find suitable interface")
 		}
 	}
 
 	hw, err := net.ParseMAC(flag.Arg(0))
 	if err != nil {
-		fmt.Printf("Cannot parse MAC address: %s\n", err)
-		os.Exit(1)
+		log.Fatalf("Cannot parse MAC address: %s", err)
 	}
 
 	if err := sendPacket(iface, hw); err != nil {
-		fmt.Printf("Cannot send a packet: %s\n", err)
-		os.Exit(1)
+		log.Fatalf("Cannot send a packet: %s", err)
 	}
 }
 
@@ -115,16 +110,16 @@ func sendPacket(iface *net.Interface, hwAddr net.HardwareAddr) error {
 
 func checkInterface(iface *net.Interface) error {
 	if (iface.Flags & net.FlagLoopback) == net.FlagLoopback {
-		return fmt.Errorf("interface is a loopback", iface.Name)
+		return errors.New("interface is a loopback")
 	}
 
 	if (iface.Flags & net.FlagUp) == 0 {
-		return fmt.Errorf("interface is down", iface.Name)
+		return errors.New("interface is down")
 	}
 
 	addrs, err := iface.Addrs()
 	if len(addrs) == 0 || err != nil {
-		return fmt.Errorf("interface does not have any address")
+		return errors.New("interface does not have any addresses")
 	}
 
 	return nil
