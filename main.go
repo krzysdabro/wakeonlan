@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -20,46 +21,18 @@ func main() {
 	log.SetFlags(0)
 	flag.Parse()
 
-	var iface *net.Interface
-
-	if fInterface != nil && *fInterface != "" {
-		i, err := net.InterfaceByName(*fInterface)
-		if err != nil {
-			log.Fatalf("Cannot get interface %q: %s", *fInterface, err)
-		}
-
-		if err := checkInterface(i); err != nil {
-			log.Fatalf("Cannot use interface %q: %s", *fInterface, err)
-		}
-
-		iface = i
-	} else {
-		ifs, err := net.Interfaces()
-		if err != nil {
-			log.Fatalf("Cannot list interfaces: %s", err)
-		}
-
-		for _, i := range ifs {
-			if err := checkInterface(&i); err != nil {
-				continue
-			}
-
-			iface = &i
-			break
-		}
-
-		if iface == nil {
-			log.Fatal("Cannot find suitable interface")
-		}
+	iface, err := getInterface()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	hw, err := net.ParseMAC(flag.Arg(0))
 	if err != nil {
-		log.Fatalf("Cannot parse MAC address: %s", err)
+		log.Fatalf("cannot parse MAC address: %s", err)
 	}
 
 	if err := sendPacket(iface, hw); err != nil {
-		log.Fatalf("Cannot send a packet: %s", err)
+		log.Fatalf("cannot send a packet: %s", err)
 	}
 }
 
@@ -108,18 +81,48 @@ func sendPacket(iface *net.Interface, hwAddr net.HardwareAddr) error {
 	return nil
 }
 
+func getInterface() (*net.Interface, error) {
+	if fInterface != nil && *fInterface != "" {
+		i, err := net.InterfaceByName(*fInterface)
+		if err != nil {
+			return nil, fmt.Errorf("cannot get interface %q: %s", *fInterface, err)
+		}
+
+		if err := checkInterface(i); err != nil {
+			return nil, err
+		}
+
+		return i, nil
+	}
+
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("cannot list interfaces: %s", err)
+	}
+
+	for _, i := range ifs {
+		if err := checkInterface(&i); err != nil {
+			continue
+		}
+
+		return &i, nil
+	}
+
+	return nil, errors.New("cannot find suitable interface")
+}
+
 func checkInterface(iface *net.Interface) error {
 	if (iface.Flags & net.FlagLoopback) == net.FlagLoopback {
-		return errors.New("interface is a loopback")
+		return fmt.Errorf("interface %q is a loopback", iface.Name)
 	}
 
 	if (iface.Flags & net.FlagUp) == 0 {
-		return errors.New("interface is down")
+		return fmt.Errorf("interface %q is down", iface.Name)
 	}
 
 	addrs, err := iface.Addrs()
 	if len(addrs) == 0 || err != nil {
-		return errors.New("interface does not have any addresses")
+		return fmt.Errorf("interface %q does not have any addresses", iface.Name)
 	}
 
 	return nil
